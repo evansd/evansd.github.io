@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <title>Bash tab completion for Fabric in Ubuntu</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="">
+    <meta name="author" content="">
+    <link href="http://fonts.googleapis.com/css?family=Lusitana:400,700" rel="stylesheet" type="text/css">
+    <link href="/legacy/static/less/main.165659bfabe0.css" rel="stylesheet" type="text/css">
+
+    <!--[if lt IE 9]>
+      <script src="http://html5shim.googlecode.com/svn/trunk/html5.js"></script>
+    <![endif]-->
+    <script type="text/javascript"> 
+      var _gaq = _gaq || [];
+      
+        if ( ! document.cookie.match(/(?:^|;)\s*nostats=1($|;)/)) {
+          _gaq.push(['_setAccount', 'UA-18781200-1']);
+          _gaq.push(['_trackPageview']);
+          
+          (function() {
+            var ga = document.createElement('script'); ga.type = 'text/javascript'; ga.async = true;
+            ga.src = ('https:' == document.location.protocol ? 'https://ssl' : 'http://www') + '.google-analytics.com/ga.js';
+            var s = document.getElementsByTagName('script')[0]; s.parentNode.insertBefore(ga, s);
+          })();
+        }
+      
+    </script>
+  </head>
+
+  <body>
+
+    <div class="navbar navbar-inverse navbar-static-top">
+      <div class="navbar-inner">
+        <div class="container">
+          <a class="brand" href="/"><span class="name">evans</span><span class="sep">.</span><span class="suffix">io</span></a>
+          <ul class="nav pull-right">
+            <li><a href="/">Postings</a></li>
+            <li><a href="/">About</a></li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="container">
+      
+  <div class="post">
+    <h1>Bash tab completion for Fabric in Ubuntu</h1>
+    <span class="date">15 October 2011</span>
+    <p>If you going to be using <a href="http://fabfile.org">Fabric</a> much (which you will, if you know what&#8217;s good for you) then having tab auto-completion of your tasks is a must. There&#8217;s already a<a href="http://code.fabfile.org/issues/show/6"> ticket</a> out for this (targeting version 1.1) but, in the meantime, I&#8217;ve adapted Adam Vanderburg&#8217;s <a href="http://github.com/adamv/dotfiles/blob/master/completion_scripts/fab_completion.bash">OS X completion script</a> for Debian/Ubuntu.</p>
+
+<p>To install, either copy the script into
+<code>/etc/bash_completion.d/</code> (if you want it system-wide) or
+append it to <code>~/.bash_completion</code> (if you want it for your account only).</p>
+
+<div class="code-highlight"><pre><code>have fab <span class="o">&amp;&amp;</span> <span class="o">{</span>
+_fab_completion<span class="o">()</span>
+<span class="o">{</span>
+    <span class="nv">COMPREPLY</span><span class="o">=()</span> 
+    <span class="nb">local </span>cur tasks
+    <span class="nv">tasks</span><span class="o">=</span><span class="k">$(</span>fab --shortlist 2&gt;/dev/null<span class="k">)</span>
+    _get_comp_words_by_ref cur
+    <span class="nv">COMPREPLY</span><span class="o">=(</span> <span class="k">$(</span><span class="nb">compgen</span> -W <span class="s2">&quot;${tasks}&quot;</span> -- <span class="k">${</span><span class="nv">cur</span><span class="k">})</span> <span class="o">)</span>
+<span class="o">}</span>
+<span class="nb">complete</span> -F _fab_completion fab
+<span class="o">}</span>
+</code></pre></div>
+
+<p>P.S I only modified the original because my version of
+<code>which</code> doesn&#8217;t support the <code>-s</code> switch. You could
+probably get away just with replacing <code>-s</code> with
+<code>&gt;&nbsp;/dev/null</code>, but once I start modifying something I can never resist the urge to fiddle.</p>
+
+    <div class="links">
+      <a href="/">view other posts &#x2192;</a>
+    </div>
+    <div id="disqus_thread"></div>
+    <script type="text/javascript">
+        var disqus_shortname = 'evansio';
+        var disqus_identifier = 'post_1';
+        var disqus_title = 'Bash tab completion for Fabric in Ubuntu';
+        
+
+        (function() {
+            var dsq = document.createElement('script'); dsq.type = 'text/javascript'; dsq.async = true;
+            dsq.src = 'http://' + disqus_shortname + '.disqus.com/embed.js';
+            (document.getElementsByTagName('head')[0] || document.getElementsByTagName('body')[0]).appendChild(dsq);
+        })();
+    </script>
+    <noscript>Please enable JavaScript to view the <a href="http://disqus.com/?ref_noscript">comments powered by Disqus.</a></noscript>
+    <a href="http://disqus.com" class="dsq-brlink">comments powered by <span class="logo-disqus">Disqus</span></a>
+  </div>
+
+    </div>
+
+    <div id="footer">
+      <div class="container">
+        <div class="links pull-right">
+          <ul>
+            <li><a href="http://github.com/evansd">github</a>&nbsp;&nbsp;|</li>
+            <li>&nbsp;&nbsp;<a href="http://twitter.com/_EvansD">twitter</a>&nbsp;&nbsp;|</li>
+            <li>&nbsp;&nbsp;<a href="mailto:dave@evansd.net">dave@evansd.net</a></li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </body>
+</html>

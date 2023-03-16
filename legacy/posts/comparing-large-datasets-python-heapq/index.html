@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <title>Comparing large data sets in Python using heapq</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="">
+    <meta name="author" content="">
+    <link href="http://fonts.googleapis.com/css?family=Lusitana:400,700" rel="stylesheet" type="text/css">
+    <link href="/legacy/static/less/main.165659bfabe0.css" rel="stylesheet" type="text/css">
+
+    <!--[if lt IE 9]>
+      <script src="http://html5shim.googlecode.com/svn/trunk/html5.js"></script>
+    <![endif]-->
+    <script type="text/javascript"> 
+      var _gaq = _gaq || [];
+      
+        if ( ! document.cookie.match(/(?:^|;)\s*nostats=1($|;)/)) {
+          _gaq.push(['_setAccount', 'UA-18781200-1']);
+          _gaq.push(['_trackPageview']);
+          
+          (function() {
+            var ga = document.createElement('script'); ga.type = 'text/javascript'; ga.async = true;
+            ga.src = ('https:' == document.location.protocol ? 'https://ssl' : 'http://www') + '.google-analytics.com/ga.js';
+            var s = document.getElementsByTagName('script')[0]; s.parentNode.insertBefore(ga, s);
+          })();
+        }
+      
+    </script>
+  </head>
+
+  <body>
+
+    <div class="navbar navbar-inverse navbar-static-top">
+      <div class="navbar-inner">
+        <div class="container">
+          <a class="brand" href="/"><span class="name">evans</span><span class="sep">.</span><span class="suffix">io</span></a>
+          <ul class="nav pull-right">
+            <li><a href="/">Postings</a></li>
+            <li><a href="/">About</a></li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="container">
+      
+  <div class="post">
+    <h1>Comparing large data sets in Python using heapq</h1>
+    <span class="date">2 November 2011</span>
+    <p>Suppose you need to compare rows from a database table with rows
+from a file. In particular, you want to know which primary keys
+exist in both the database and the file, and which exist in only one
+data source. For small tables this can be done fairly easily using
+Python’s set difference operations, but what do you do when the tables
+are far too large to hold in memory?</p>
+
+<p>Fortunately, if the data is available sorted by primary key, there is
+an easy solution. Using a lazy iterator to pull the rows in one at a
+time, you grab the first rows from both the database and the file and
+compare primary keys. If they’re equal then you know the item exists
+in both sources. If one is greater than the other then the leading
+iterator is missing some primary key values. At this point you keep
+advancing the trailing iterator to give you the missing keys until it
+catches up with, or overtakes, the leading iterator. Repeat this
+process until both iterators are exhausted.</p>
+
+<p>This process allows you to find missing items in both sources, and
+compare existing items, in a single pass and with fixed memory usage
+regardless of the size of the data sets. (The observant will notice
+that this operation is essentially a full outer join over the tables.)</p>
+
+<p>At a high level, then, this is what we want our code to look like:</p>
+
+<div class="code-highlight"><pre><code><span class="k">for</span> <span class="n">row_id</span><span class="p">,</span> <span class="p">(</span><span class="n">db_row</span><span class="p">,</span> <span class="n">file_row</span><span class="p">)</span> <span class="ow">in</span> <span class="n">full_outer_join</span><span class="p">(</span>
+      <span class="n">db_iterator</span><span class="p">(),</span> <span class="n">file_iterator</span><span class="p">(),</span> <span class="n">key</span><span class="o">=</span><span class="k">lambda</span> <span class="n">row</span><span class="p">:</span> <span class="n">row</span><span class="o">.</span><span class="n">id</span><span class="p">):</span>
+    <span class="k">if</span> <span class="n">db_row</span> <span class="ow">is</span> <span class="bp">None</span><span class="p">:</span>
+        <span class="n">handle_row_missing_from_db</span><span class="p">(</span><span class="n">file_row</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">file_row</span> <span class="ow">is</span> <span class="bp">None</span><span class="p">:</span>
+        <span class="n">handle_row_missing_from_file</span><span class="p">(</span><span class="n">db_row</span><span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">compare_rows</span><span class="p">(</span><span class="n">db_row</span><span class="p">,</span> <span class="n">file_row</span><span class="p">)</span>
+</code></pre></div>
+
+<p>Thanks to the stdlib&#8217;s
+<a href="http://docs.python.org/2/library/heapq.html">heapq</a> module &#8211; which
+provides an efficient mechanism for lazily merging sorted iterables &#8211;
+we can implement all this with very little code:</p>
+
+<div class="code-highlight"><pre><code><span class="kn">from</span> <span class="nn">itertools</span> <span class="kn">import</span> <span class="n">imap</span><span class="p">,</span> <span class="n">izip</span><span class="p">,</span> <span class="n">count</span><span class="p">,</span> <span class="n">repeat</span><span class="p">,</span> <span class="n">tee</span>
+<span class="kn">import</span> <span class="nn">heapq</span>
+
+<span class="k">def</span> <span class="nf">full_outer_join</span><span class="p">(</span><span class="o">*</span><span class="n">iterables</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Perform a full outer join on a sequence of sorted iterables, where the</span>
+<span class="sd">    key function supplies the join condition.</span>
+
+<span class="sd">    full_outer_join(iterables... [, key=lambda x:(x,)][, missing=None])</span>
+
+<span class="sd">    Where an iterable has no matching item for a particular key, the value</span>
+<span class="sd">    of the keyword argument &quot;missing&quot; will be returned (by default: None).</span>
+
+<span class="sd">    Yields tuples of the form: (key, list_of_values_with_that_key)</span>
+
+<span class="sd">    Note: each of the iterables must already be in ascending order by key.</span>
+
+<span class="sd">    &gt;&gt;&gt; for i in full_outer_join([1,2,3,5], [4], [1,1,3,5,5,6]):</span>
+<span class="sd">    ...     print i</span>
+<span class="sd">    ... </span>
+<span class="sd">    ((1,), [1, None, 1])</span>
+<span class="sd">    ((1,), [None, None, 1])</span>
+<span class="sd">    ((2,), [2, None, None])</span>
+<span class="sd">    ((3,), [3, None, 3])</span>
+<span class="sd">    ((4,), [None, 4, None])</span>
+<span class="sd">    ((5,), [5, None, 5])</span>
+<span class="sd">    ((5,), [None, None, 5])</span>
+<span class="sd">    ((6,), [None, None, 6])</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">key</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s">&#39;key&#39;</span><span class="p">,</span> <span class="bp">None</span><span class="p">)</span>
+    <span class="n">missing</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s">&#39;missing&#39;</span><span class="p">,</span> <span class="bp">None</span><span class="p">)</span>
+    <span class="c"># Decorate each iterator in the following format:</span>
+    <span class="c">#  - key: The result of applying the key function to the value</span>
+    <span class="c">#  - counter: An always incrementing counter which acts as a tie-</span>
+    <span class="c">#             breaker so that elements with the same key get returned</span>
+    <span class="c">#             in their original order</span>
+    <span class="c">#  - iter_num: So we know which iterator each value came from</span>
+    <span class="c">#  - value: The original value yielded from the iterator</span>
+    <span class="n">counter</span> <span class="o">=</span> <span class="n">count</span><span class="p">()</span>
+    <span class="n">decorated</span> <span class="o">=</span> <span class="p">[</span>
+        <span class="n">izip</span><span class="p">(</span><span class="n">imap</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="n">iter1</span><span class="p">),</span> <span class="n">counter</span><span class="p">,</span> <span class="n">repeat</span><span class="p">(</span><span class="n">iter_num</span><span class="p">),</span> <span class="n">iter2</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">iter_num</span><span class="p">,</span> <span class="p">(</span><span class="n">iter1</span><span class="p">,</span> <span class="n">iter2</span><span class="p">)</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="nb">map</span><span class="p">(</span><span class="n">tee</span><span class="p">,</span> <span class="n">iterables</span><span class="p">))</span>
+    <span class="p">]</span>
+    <span class="n">empty_output</span> <span class="o">=</span> <span class="p">[</span><span class="n">missing</span><span class="p">]</span> <span class="o">*</span> <span class="nb">len</span><span class="p">(</span><span class="n">iterables</span><span class="p">)</span>
+    <span class="n">output</span> <span class="o">=</span> <span class="n">empty_output</span><span class="p">[:]</span>
+    <span class="c"># heapq.merge does most of the actual work here</span>
+    <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">counter</span><span class="p">,</span> <span class="n">iter_num</span><span class="p">,</span> <span class="n">value</span> <span class="ow">in</span> <span class="n">heapq</span><span class="o">.</span><span class="n">merge</span><span class="p">(</span><span class="o">*</span><span class="n">decorated</span><span class="p">):</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="c"># If the key has changed, or we&#39;ve already seen this key from</span>
+            <span class="c"># this particular iterator, yield and reset the output array</span>
+            <span class="k">if</span> <span class="n">key</span> <span class="o">!=</span> <span class="n">prev_key</span> <span class="ow">or</span> <span class="n">output</span><span class="p">[</span><span class="n">iter_num</span><span class="p">]</span> <span class="ow">is</span> <span class="ow">not</span> <span class="n">missing</span><span class="p">:</span>
+              <span class="k">yield</span> <span class="p">(</span><span class="n">prev_key</span><span class="p">,</span> <span class="n">output</span><span class="p">)</span>
+              <span class="n">output</span> <span class="o">=</span> <span class="n">empty_output</span><span class="p">[:]</span>
+        <span class="c"># Allow for there being no prev_key on first run of loop</span>
+        <span class="k">except</span> <span class="ne">NameError</span><span class="p">:</span>
+            <span class="k">pass</span>
+        <span class="n">output</span><span class="p">[</span><span class="n">iter_num</span><span class="p">]</span> <span class="o">=</span> <span class="n">value</span>
+        <span class="n">prev_key</span> <span class="o">=</span> <span class="n">key</span>
+    <span class="c"># If there&#39;s output pending, yield it</span>
+    <span class="k">if</span> <span class="n">output</span> <span class="o">!=</span> <span class="n">empty_output</span><span class="p">:</span>
+        <span class="k">yield</span> <span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="n">output</span><span class="p">)</span>
+</code></pre></div>
+
+<p>Canonical version is available as a <a href="https://gist.github.com/976885">Gist</a>.</p>
+
+    <div class="links">
+      <a href="/">view other posts &#x2192;</a>
+    </div>
+    <div id="disqus_thread"></div>
+    <script type="text/javascript">
+        var disqus_shortname = 'evansio';
+        var disqus_identifier = 'post_5';
+        var disqus_title = 'Comparing large data sets in Python using heapq';
+        
+
+        (function() {
+            var dsq = document.createElement('script'); dsq.type = 'text/javascript'; dsq.async = true;
+            dsq.src = 'http://' + disqus_shortname + '.disqus.com/embed.js';
+            (document.getElementsByTagName('head')[0] || document.getElementsByTagName('body')[0]).appendChild(dsq);
+        })();
+    </script>
+    <noscript>Please enable JavaScript to view the <a href="http://disqus.com/?ref_noscript">comments powered by Disqus.</a></noscript>
+    <a href="http://disqus.com" class="dsq-brlink">comments powered by <span class="logo-disqus">Disqus</span></a>
+  </div>
+
+    </div>
+
+    <div id="footer">
+      <div class="container">
+        <div class="links pull-right">
+          <ul>
+            <li><a href="http://github.com/evansd">github</a>&nbsp;&nbsp;|</li>
+            <li>&nbsp;&nbsp;<a href="http://twitter.com/_EvansD">twitter</a>&nbsp;&nbsp;|</li>
+            <li>&nbsp;&nbsp;<a href="mailto:dave@evansd.net">dave@evansd.net</a></li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </body>
+</html>

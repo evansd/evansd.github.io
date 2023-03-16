@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <title>Wildcard subdomains of localhost</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="">
+    <meta name="author" content="">
+    <link href="http://fonts.googleapis.com/css?family=Lusitana:400,700" rel="stylesheet" type="text/css">
+    <link href="/legacy/static/less/main.165659bfabe0.css" rel="stylesheet" type="text/css">
+
+    <!--[if lt IE 9]>
+      <script src="http://html5shim.googlecode.com/svn/trunk/html5.js"></script>
+    <![endif]-->
+    <script type="text/javascript"> 
+      var _gaq = _gaq || [];
+      
+        if ( ! document.cookie.match(/(?:^|;)\s*nostats=1($|;)/)) {
+          _gaq.push(['_setAccount', 'UA-18781200-1']);
+          _gaq.push(['_trackPageview']);
+          
+          (function() {
+            var ga = document.createElement('script'); ga.type = 'text/javascript'; ga.async = true;
+            ga.src = ('https:' == document.location.protocol ? 'https://ssl' : 'http://www') + '.google-analytics.com/ga.js';
+            var s = document.getElementsByTagName('script')[0]; s.parentNode.insertBefore(ga, s);
+          })();
+        }
+      
+    </script>
+  </head>
+
+  <body>
+
+    <div class="navbar navbar-inverse navbar-static-top">
+      <div class="navbar-inner">
+        <div class="container">
+          <a class="brand" href="/"><span class="name">evans</span><span class="sep">.</span><span class="suffix">io</span></a>
+          <ul class="nav pull-right">
+            <li><a href="/">Postings</a></li>
+            <li><a href="/">About</a></li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="container">
+      
+  <div class="post">
+    <h1>Wildcard subdomains of localhost</h1>
+    <span class="date">10 February 2011</span>
+    <div class="alert alert-success">
+<strong>Update:</strong> The <a href="http://xip.io/">xip.io</a> service
+from 37 Signals pretty much obviates the below; unless you're looking
+for a solution that works offline in which case it might still prove
+useful.
+</div>
+
+<p>It always slightly niggled that I couldn&#8217;t just stick a
+<code>*.localhost</code> entry in <code>/etc/hosts</code> and have all subdomains of localhost resolve to 127.0.0.1. But setting up a local nameserver, and making sure external domains still got resolved properly, always seemed like too much faff. It turns out though, thanks to <em>dnsmasq</em>, that it&#8217;s actually very straightforward. (Instructions are for Ubuntu but <em>dnsmasq</em> runs on most *nix systems.)<!&#8211;more&#8211;></p>
+
+<p><strong>1</strong>. Install <a href="http://www.thekelleys.org.uk/dnsmasq/doc.html">dnsmasq</a>, a DNS forwarder which you can configure to reply to certain queries locally and forward all others on to your external nameservers:</p>
+
+<div class="code-highlight"><pre><code><span class="go">sudo aptitude install dnsmasq</span>
+</code></pre></div>
+
+<p><strong>2</strong>. Configure it to resolve all localhost domains to 127.0.0.1. By default, dnsmasq will include all files in <code>/etc/dnsmasq.d/</code> so create a new file here with a sensible name like <code>/etc/dnsmasq.d/localhost.conf</code> and add the following line:</p>
+
+<div class="code-highlight"><pre><code><span class="na">address</span><span class="o">=</span><span class="s">/localhost/127.0.0.1</span>
+</code></pre></div>
+
+<p>(Hopefully the syntax is obvious here. See the <a href="http://www.thekelleys.org.uk/dnsmasq/docs/dnsmasq-man.html">man page</a> for more detail.)</p>
+
+<p><strong>3</strong>. You now have a DNS forwarder up and running on localhost. The final step is to get your resolver to send queries to it. We do this by getting our DHCP client to add the local address to the list of nameservers it gets from the DHCP server.  So edit <code>/etc/dhcp3/dhclient.conf</code> and add the following line:</p>
+
+<div class="code-highlight"><pre><code>prepend domain-name-servers 127.0.0.1;
+</code></pre></div>
+
+<p>(You&#8217;ll probably find that this line is already there and you just need to uncomment it.)</p>
+
+<p><strong>4</strong>. To check everything&#8217;s working, reload the dnsmasq config and request a new lease from your DHCP server:</p>
+
+<div class="code-highlight"><pre><code><span class="go">sudo service dnsmasq restart</span>
+<span class="go">sudo dhclient</span>
+</code></pre></div>
+
+<p>And you should be good to go…</p>
+
+<div class="code-highlight"><pre><code><span class="go">dig somesubdomain.localhost</span>
+</code></pre></div>
+
+    <div class="links">
+      <a href="/">view other posts &#x2192;</a>
+    </div>
+    <div id="disqus_thread"></div>
+    <script type="text/javascript">
+        var disqus_shortname = 'evansio';
+        var disqus_identifier = 'post_2';
+        var disqus_title = 'Wildcard subdomains of localhost';
+        
+
+        (function() {
+            var dsq = document.createElement('script'); dsq.type = 'text/javascript'; dsq.async = true;
+            dsq.src = 'http://' + disqus_shortname + '.disqus.com/embed.js';
+            (document.getElementsByTagName('head')[0] || document.getElementsByTagName('body')[0]).appendChild(dsq);
+        })();
+    </script>
+    <noscript>Please enable JavaScript to view the <a href="http://disqus.com/?ref_noscript">comments powered by Disqus.</a></noscript>
+    <a href="http://disqus.com" class="dsq-brlink">comments powered by <span class="logo-disqus">Disqus</span></a>
+  </div>
+
+    </div>
+
+    <div id="footer">
+      <div class="container">
+        <div class="links pull-right">
+          <ul>
+            <li><a href="http://github.com/evansd">github</a>&nbsp;&nbsp;|</li>
+            <li>&nbsp;&nbsp;<a href="http://twitter.com/_EvansD">twitter</a>&nbsp;&nbsp;|</li>
+            <li>&nbsp;&nbsp;<a href="mailto:dave@evansd.net">dave@evansd.net</a></li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </body>
+</html>

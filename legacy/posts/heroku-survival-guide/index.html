@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <title>A Short Heroku Survival Guide</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="">
+    <meta name="author" content="">
+    <link href="http://fonts.googleapis.com/css?family=Lusitana:400,700" rel="stylesheet" type="text/css">
+    <link href="/legacy/static/less/main.165659bfabe0.css" rel="stylesheet" type="text/css">
+
+    <!--[if lt IE 9]>
+      <script src="http://html5shim.googlecode.com/svn/trunk/html5.js"></script>
+    <![endif]-->
+    <script type="text/javascript"> 
+      var _gaq = _gaq || [];
+      
+        if ( ! document.cookie.match(/(?:^|;)\s*nostats=1($|;)/)) {
+          _gaq.push(['_setAccount', 'UA-18781200-1']);
+          _gaq.push(['_trackPageview']);
+          
+          (function() {
+            var ga = document.createElement('script'); ga.type = 'text/javascript'; ga.async = true;
+            ga.src = ('https:' == document.location.protocol ? 'https://ssl' : 'http://www') + '.google-analytics.com/ga.js';
+            var s = document.getElementsByTagName('script')[0]; s.parentNode.insertBefore(ga, s);
+          })();
+        }
+      
+    </script>
+  </head>
+
+  <body>
+
+    <div class="navbar navbar-inverse navbar-static-top">
+      <div class="navbar-inner">
+        <div class="container">
+          <a class="brand" href="/"><span class="name">evans</span><span class="sep">.</span><span class="suffix">io</span></a>
+          <ul class="nav pull-right">
+            <li><a href="/">Postings</a></li>
+            <li><a href="/">About</a></li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="container">
+      
+  <div class="post">
+    <h1>A Short Heroku Survival Guide</h1>
+    <span class="date">28 May 2013</span>
+    <p>The downside of services that promise to make
+things <em>Magically Just Work</em> for you are that when things go wrong &#8211; as
+inevitably they do &#8211; they go wrong in magical, unpredictable, and hard-to-debug ways.
+Heroku is no exception to this rule, as Adrian Holovaty nicely
+illustrates in his <a href="http://www.holovaty.com/writing/aws-notes/">recent
+lament</a>
+for the end of his personal Heroku honeymoon.</p>
+
+<p>As in other areas of life, the secret to a happy and long-lasting
+relationship with Heroku is to start with realistic expectations and a
+willingness to put in some hard work. Whatever the brochures promise,
+Heroku doesn&#8217;t allow you to forget completely about the details of
+deployment. But it can, I think, offer real value over managing your own
+servers &#8211; especially for small organisations without full-time
+technical staff &#8211; and with the right preparation the pain and heartache can be
+kept to a minimum. Below are a few tips I&#8217;ve picked up in working with
+Heroku that have helped me. There&#8217;s nothing earth-shattering in here,
+but maybe they&#8217;ll help you too.</p>
+
+<h3>1. heroku run bash</h3>
+
+<p>This simple command is, in my experience, the biggest eye-opener for
+people for new to Heroku and the biggest step towards convincing them
+that Heroku isn&#8217;t an entirely opaque black box. It fires up a new dyno (essentially, a new server
+instance) with a copy of your deployed application and starts a shell
+session.</p>
+
+<div class="code-highlight"><pre><code>dave@carnap:~/projects/evans-io <span class="nv">$ </span>heroku run bash
+Running <span class="sb">`</span>bash<span class="sb">`</span> attached to terminal... up, run.9650
+~ <span class="nv">$ </span>cat /etc/lsb-release 
+<span class="nv">DISTRIB_ID</span><span class="o">=</span>Ubuntu
+<span class="nv">DISTRIB_RELEASE</span><span class="o">=</span>10.04
+<span class="nv">DISTRIB_CODENAME</span><span class="o">=</span>lucid
+<span class="nv">DISTRIB_DESCRIPTION</span><span class="o">=</span><span class="s2">&quot;Ubuntu 10.04 LTS&quot;</span>
+~ <span class="nv">$ </span>curl http://icanhazip.com
+50.16.130.216
+</code></pre></div>
+
+<p>You can then interact with this shell pretty much as you would on
+any other UNIX box. In particular:</p>
+
+<ul>
+<li>You can run as many processes as you want (within the 512MB limit)
+and interact with them.</li>
+<li>You can write to the filesystem and modify existing files
+(although changes will only persist for the life of your session).</li>
+<li>You can connect to any external service you want.</li>
+<li>You can SSH out into other machines and use SCP to copy files back and forth.</li>
+</ul>
+
+<p>There are a few limitations of
+course: you don&#8217;t have root; the Ubuntu installation you run in is pretty minimal so
+you might be missing your favourite debugging tool; and incoming connections are
+firewalled off. But generally speaking I&#8217;ve found that debugging in this
+way isn&#8217;t much more painful than it is on your own VPS. And it&#8217;s
+certainly an awful lot better than desperately deploying hundreds of tiny commits
+while tailing Heroku&#8217;s log output and wondering what the hell is going
+on (we&#8217;ve all been there)!</p>
+
+<p>Incidentally, this might be one of the few situations where mastery of
+(or at least minimal competence with) the venerable <code>ed</code> editor might
+actually come in handy for the modern developer as neither <code>vi</code> or <code>nano</code>
+is available in the standard Heroku environment. You won&#8217;t
+want to do much serious coding with it, but if you just need to tweak
+a few config values then it&#8217;s <a href="http://blog.sanctum.geek.nz/actually-using-ed/">not too
+hard</a> to get the basics.</p>
+
+<h3>2. Get to know your buildpack</h3>
+
+<p>Most of the really nasty magic in Heroku is not in the runtime
+environment but in the buildpacks: the code responsible for taking a git
+checkout of your application code and producing a &#8220;slug&#8221; (a filesystem
+snapshot) with everything needed to run your application. Fortunately,
+the buildpack repositories are freely accessible on
+<a href="https://github.com/search?q=heroku-buildpack+user%3Aheroku&amp;ref=searchresults&amp;type=Repositories">GitHub</a> 
+and are fairly short and easy to read.</p>
+
+<p>You can read the full details of the Buildpack API
+<a href="https://devcenter.heroku.com/articles/buildpack-api">here</a> (there&#8217;s
+very little to it), but most of the action happens in the
+<em>compile</em> phase. On GitHub, find the buildpack for whichever platform
+you&#8217;re running on and open the <code>bin/compile</code> file. You&#8217;ll find a script
+(almost certainly bash) whose job is to take your source code and
+produce a self-contained application, packaged up with all its
+dependencies and ready to run.</p>
+
+<p>It&#8217;s really worth the time to scan through this script and get a sense
+of what it&#8217;s up to. This is where the dirtiest hacks live (“if this
+version of this dependency is specified then rename this file and set
+this special environment variable”) and having an idea of what these are
+will give you a useful starting point when things start going
+wrong.</p>
+
+<h3>3. Pin your buildpack version</h3>
+
+<p>Having your latest deploy break mysteriously, not because of any changes
+you&#8217;ve made but because Heroku silently changed the buildpack out from
+under you, is an incredibly frustrating experience. Fortunately, it&#8217;s
+easy to make sure this never happens.</p>
+
+<p>First, find the appropriate
+buildpack on GitHub and copy the read-only repository URL. For the
+Python buildpack, it looks like this:</p>
+
+<pre><code>https://github.com/heroku/heroku-buildpack-python.git
+</code></pre>
+
+<p>Next, copy the SHA of the latest commit (there&#8217;s a handy link for this
+on the main repository page) and add it to the end of the git URL,
+preceded by a hash, like this:</p>
+
+<pre><code>https://github.com/heroku/heroku-buildpack-python.git#23493302e665dc2428f388654a1d13fd4d437b7a
+</code></pre>
+
+<p>Finally, tell Heroku to use this specific version of this buildpack when
+deploying your application:</p>
+
+<pre><code>heroku config:set \
+ BUILDPACK_URL='https://github.com/heroku/heroku-buildpack-python.git#23493302e665dc2428f388654a1d13fd4d437b7a'
+</code></pre>
+
+<p>You&#8217;ll probably want to &#8220;watch&#8221; the repository on GitHub so you get
+automatic notifications when it&#8217;s updated and can update the
+BUILDPACK_URL with the new commit SHA. It&#8217;s a little bit more effort
+than letting Heroku update it automatically, but not much. And now, when your latest
+deployment falls flat on its face, at least you know it was probably
+your fault.</p>
+
+<h3>4. Set up Heroku error alerting</h3>
+
+<p>Heroku errors occur at a different level from application errors and so
+won&#8217;t be caught by your application&#8217;s standard error handling and
+notification machinery.
+However, if your application suddenly starts being killed for
+hitting its memory limits you really want to know about it. It takes a
+minute to set up the free version of the <a href="https://addons.heroku.com/logentries">LogEntries
+add-on</a> which will send email
+notifications whenever one of these Heroku errors occurs. Do it now.</p>
+
+<h3>Any other suggestions?</h3>
+
+<p>Those are my four simple tips. If you&#8217;ve found them helpful, or if
+you&#8217;ve got suggestions of your own
+to add, please get in touch.</p>
+
+    <div class="links">
+      <a href="/">view other posts &#x2192;</a>
+    </div>
+    <div id="disqus_thread"></div>
+    <script type="text/javascript">
+        var disqus_shortname = 'evansio';
+        var disqus_identifier = 'post_7';
+        var disqus_title = 'A Short Heroku Survival Guide';
+        
+
+        (function() {
+            var dsq = document.createElement('script'); dsq.type = 'text/javascript'; dsq.async = true;
+            dsq.src = 'http://' + disqus_shortname + '.disqus.com/embed.js';
+            (document.getElementsByTagName('head')[0] || document.getElementsByTagName('body')[0]).appendChild(dsq);
+        })();
+    </script>
+    <noscript>Please enable JavaScript to view the <a href="http://disqus.com/?ref_noscript">comments powered by Disqus.</a></noscript>
+    <a href="http://disqus.com" class="dsq-brlink">comments powered by <span class="logo-disqus">Disqus</span></a>
+  </div>
+
+    </div>
+
+    <div id="footer">
+      <div class="container">
+        <div class="links pull-right">
+          <ul>
+            <li><a href="http://github.com/evansd">github</a>&nbsp;&nbsp;|</li>
+            <li>&nbsp;&nbsp;<a href="http://twitter.com/_EvansD">twitter</a>&nbsp;&nbsp;|</li>
+            <li>&nbsp;&nbsp;<a href="mailto:dave@evansd.net">dave@evansd.net</a></li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </body>
+</html>

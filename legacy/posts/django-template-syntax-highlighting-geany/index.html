@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <title>Enabling Django template syntax highlighting in Geany</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="">
+    <meta name="author" content="">
+    <link href="http://fonts.googleapis.com/css?family=Lusitana:400,700" rel="stylesheet" type="text/css">
+    <link href="/legacy/static/less/main.165659bfabe0.css" rel="stylesheet" type="text/css">
+
+    <!--[if lt IE 9]>
+      <script src="http://html5shim.googlecode.com/svn/trunk/html5.js"></script>
+    <![endif]-->
+    <script type="text/javascript"> 
+      var _gaq = _gaq || [];
+      
+        if ( ! document.cookie.match(/(?:^|;)\s*nostats=1($|;)/)) {
+          _gaq.push(['_setAccount', 'UA-18781200-1']);
+          _gaq.push(['_trackPageview']);
+          
+          (function() {
+            var ga = document.createElement('script'); ga.type = 'text/javascript'; ga.async = true;
+            ga.src = ('https:' == document.location.protocol ? 'https://ssl' : 'http://www') + '.google-analytics.com/ga.js';
+            var s = document.getElementsByTagName('script')[0]; s.parentNode.insertBefore(ga, s);
+          })();
+        }
+      
+    </script>
+  </head>
+
+  <body>
+
+    <div class="navbar navbar-inverse navbar-static-top">
+      <div class="navbar-inner">
+        <div class="container">
+          <a class="brand" href="/"><span class="name">evans</span><span class="sep">.</span><span class="suffix">io</span></a>
+          <ul class="nav pull-right">
+            <li><a href="/">Postings</a></li>
+            <li><a href="/">About</a></li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="container">
+      
+  <div class="post">
+    <h1>Enabling Django template syntax highlighting in Geany</h1>
+    <span class="date">17 February 2011</span>
+    <p><a href="http://geany.org/">Geany</a> is a lightweight but surprisingly powerful GTK-based IDE. Here&#8217;s how to enable syntax highlighting for Django&#8217;s template tags in HTML files:</p>
+
+<p><strong>1.</strong> Copy <code>/usr/share/geany/filetypes.html</code> to <code>~/.config/geany/filedefs/</code></li></p>
+
+<p><strong>2.</strong> Find the <code>[lexer_properties]</code> section of the file and add:</p>
+
+<div class="code-highlight"><pre><code><span class="na">lexer.html.django</span><span class="o">=</span><span class="s">1</span>
+</code></pre></div>
+
+<p>Geany uses <a href="http://www.scintilla.org/">Scintilla</a> as its highlighting engine so have a look at their <a href="http://www.scintilla.org/SciTEDoc.html">documentation</a> for a full list of the available lexer options.</p>
+
+    <div class="links">
+      <a href="/">view other posts &#x2192;</a>
+    </div>
+    <div id="disqus_thread"></div>
+    <script type="text/javascript">
+        var disqus_shortname = 'evansio';
+        var disqus_identifier = 'post_3';
+        var disqus_title = 'Enabling Django template syntax highlighting in Geany';
+        
+
+        (function() {
+            var dsq = document.createElement('script'); dsq.type = 'text/javascript'; dsq.async = true;
+            dsq.src = 'http://' + disqus_shortname + '.disqus.com/embed.js';
+            (document.getElementsByTagName('head')[0] || document.getElementsByTagName('body')[0]).appendChild(dsq);
+        })();
+    </script>
+    <noscript>Please enable JavaScript to view the <a href="http://disqus.com/?ref_noscript">comments powered by Disqus.</a></noscript>
+    <a href="http://disqus.com" class="dsq-brlink">comments powered by <span class="logo-disqus">Disqus</span></a>
+  </div>
+
+    </div>
+
+    <div id="footer">
+      <div class="container">
+        <div class="links pull-right">
+          <ul>
+            <li><a href="http://github.com/evansd">github</a>&nbsp;&nbsp;|</li>
+            <li>&nbsp;&nbsp;<a href="http://twitter.com/_EvansD">twitter</a>&nbsp;&nbsp;|</li>
+            <li>&nbsp;&nbsp;<a href="mailto:dave@evansd.net">dave@evansd.net</a></li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </body>
+</html>

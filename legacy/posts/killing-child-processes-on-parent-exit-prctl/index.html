@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <title>Ensuring child processes die on exit with PrCtl</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="">
+    <meta name="author" content="">
+    <link href="http://fonts.googleapis.com/css?family=Lusitana:400,700" rel="stylesheet" type="text/css">
+    <link href="/legacy/static/less/main.165659bfabe0.css" rel="stylesheet" type="text/css">
+
+    <!--[if lt IE 9]>
+      <script src="http://html5shim.googlecode.com/svn/trunk/html5.js"></script>
+    <![endif]-->
+    <script type="text/javascript"> 
+      var _gaq = _gaq || [];
+      
+        if ( ! document.cookie.match(/(?:^|;)\s*nostats=1($|;)/)) {
+          _gaq.push(['_setAccount', 'UA-18781200-1']);
+          _gaq.push(['_trackPageview']);
+          
+          (function() {
+            var ga = document.createElement('script'); ga.type = 'text/javascript'; ga.async = true;
+            ga.src = ('https:' == document.location.protocol ? 'https://ssl' : 'http://www') + '.google-analytics.com/ga.js';
+            var s = document.getElementsByTagName('script')[0]; s.parentNode.insertBefore(ga, s);
+          })();
+        }
+      
+    </script>
+  </head>
+
+  <body>
+
+    <div class="navbar navbar-inverse navbar-static-top">
+      <div class="navbar-inner">
+        <div class="container">
+          <a class="brand" href="/"><span class="name">evans</span><span class="sep">.</span><span class="suffix">io</span></a>
+          <ul class="nav pull-right">
+            <li><a href="/">Postings</a></li>
+            <li><a href="/">About</a></li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="container">
+      
+  <div class="post">
+    <h1>Ensuring child processes die on exit with PrCtl</h1>
+    <span class="date">25 November 2012</span>
+    <p>One issue you encounter when writing software which starts child processes
+is making sure the children terminate when the parent does. If
+the child processes are well behaved, or if the parent always exits
+cleanly under controlled conditions, this might not be much of an issue.
+But if you find youself stuck working with other, badly behaved
+software (looking at you PhantomJS) there is a simple solution in the
+form of Linux&#8217;s <a href="http://www.kernel.org/doc/man-pages/online/pages/man2/prctl.2.html">prctl module</a>.</p>
+
+<p>This module allows a process to specify a signal it should be sent when its
+parent dies, which you should do after forking the child process but
+before exec&#8217;ing the external code. Python&#8217;s <a href="http://docs.python.org/2/library/subprocess.html#popen-constructor">subprocess</a>
+module provides a hook for exactly
+this purpose (the <code>preexec_fn</code> argument to <code>Popen</code>). And, while the stdlib doesn&#8217;t
+provide a native interface to <code>prctl</code>, <a href="http://docs.python.org/2/library/ctypes.html">ctypes</a> comes to the resuce.</p>
+
+<p>Putting it all together, the following snippet of code does the business:</p>
+
+<div class="code-highlight"><pre><code><span class="kn">import</span> <span class="nn">signal</span>
+<span class="kn">from</span> <span class="nn">ctypes</span> <span class="kn">import</span> <span class="n">cdll</span>
+
+<span class="c"># Constant taken from http://linux.die.net/include/linux/prctl.h</span>
+<span class="n">PR_SET_PDEATHSIG</span> <span class="o">=</span> <span class="mi">1</span>
+
+<span class="k">class</span> <span class="nc">PrCtlError</span><span class="p">(</span><span class="ne">Exception</span><span class="p">):</span>
+    <span class="k">pass</span>
+
+<span class="k">def</span> <span class="nf">on_parent_exit</span><span class="p">(</span><span class="n">signame</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Return a function to be run in a child process which will trigger</span>
+<span class="sd">    SIGNAME to be sent when the parent process dies</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">signum</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">signal</span><span class="p">,</span> <span class="n">signame</span><span class="p">)</span>
+    <span class="k">def</span> <span class="nf">set_parent_exit_signal</span><span class="p">():</span>
+        <span class="c"># http://linux.die.net/man/2/prctl</span>
+        <span class="n">result</span> <span class="o">=</span> <span class="n">cdll</span><span class="p">[</span><span class="s">&#39;libc.so.6&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">prctl</span><span class="p">(</span><span class="n">PR_SET_PDEATHSIG</span><span class="p">,</span> <span class="n">signum</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">result</span> <span class="o">!=</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="n">PrCtlError</span><span class="p">(</span><span class="s">&#39;prctl failed with error code </span><span class="si">%s</span><span class="s">&#39;</span> <span class="o">%</span> <span class="n">result</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">set_parent_exit_signal</span>
+</code></pre></div>
+
+<p>Usage is simple:</p>
+
+<div class="code-highlight"><pre><code><span class="n">subprocess</span><span class="o">.</span><span class="n">Popen</span><span class="p">([</span><span class="s">&#39;some-executable&#39;</span><span class="p">],</span> <span class="n">preexec_fn</span><span class="o">=</span><span class="n">on_parent_exit</span><span class="p">(</span><span class="s">&#39;SIGTERM&#39;</span><span class="p">))</span>
+</code></pre></div>
+
+<p>Canonical version is available as a <a href="https://gist.github.com/2346614">Gist</a>.</p>
+
+    <div class="links">
+      <a href="/">view other posts &#x2192;</a>
+    </div>
+    <div id="disqus_thread"></div>
+    <script type="text/javascript">
+        var disqus_shortname = 'evansio';
+        var disqus_identifier = 'post_6';
+        var disqus_title = 'Ensuring child processes die on exit with PrCtl';
+        
+
+        (function() {
+            var dsq = document.createElement('script'); dsq.type = 'text/javascript'; dsq.async = true;
+            dsq.src = 'http://' + disqus_shortname + '.disqus.com/embed.js';
+            (document.getElementsByTagName('head')[0] || document.getElementsByTagName('body')[0]).appendChild(dsq);
+        })();
+    </script>
+    <noscript>Please enable JavaScript to view the <a href="http://disqus.com/?ref_noscript">comments powered by Disqus.</a></noscript>
+    <a href="http://disqus.com" class="dsq-brlink">comments powered by <span class="logo-disqus">Disqus</span></a>
+  </div>
+
+    </div>
+
+    <div id="footer">
+      <div class="container">
+        <div class="links pull-right">
+          <ul>
+            <li><a href="http://github.com/evansd">github</a>&nbsp;&nbsp;|</li>
+            <li>&nbsp;&nbsp;<a href="http://twitter.com/_EvansD">twitter</a>&nbsp;&nbsp;|</li>
+            <li>&nbsp;&nbsp;<a href="mailto:dave@evansd.net">dave@evansd.net</a></li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </body>
+</html>

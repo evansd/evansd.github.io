@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <title>Using SSH agent for sudo authentication</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="">
+    <meta name="author" content="">
+    <link href="http://fonts.googleapis.com/css?family=Lusitana:400,700" rel="stylesheet" type="text/css">
+    <link href="/legacy/static/less/main.165659bfabe0.css" rel="stylesheet" type="text/css">
+
+    <!--[if lt IE 9]>
+      <script src="http://html5shim.googlecode.com/svn/trunk/html5.js"></script>
+    <![endif]-->
+    <script type="text/javascript"> 
+      var _gaq = _gaq || [];
+      
+        if ( ! document.cookie.match(/(?:^|;)\s*nostats=1($|;)/)) {
+          _gaq.push(['_setAccount', 'UA-18781200-1']);
+          _gaq.push(['_trackPageview']);
+          
+          (function() {
+            var ga = document.createElement('script'); ga.type = 'text/javascript'; ga.async = true;
+            ga.src = ('https:' == document.location.protocol ? 'https://ssl' : 'http://www') + '.google-analytics.com/ga.js';
+            var s = document.getElementsByTagName('script')[0]; s.parentNode.insertBefore(ga, s);
+          })();
+        }
+      
+    </script>
+  </head>
+
+  <body>
+
+    <div class="navbar navbar-inverse navbar-static-top">
+      <div class="navbar-inner">
+        <div class="container">
+          <a class="brand" href="/"><span class="name">evans</span><span class="sep">.</span><span class="suffix">io</span></a>
+          <ul class="nav pull-right">
+            <li><a href="/">Postings</a></li>
+            <li><a href="/">About</a></li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="container">
+      
+  <div class="post">
+    <h1>Using SSH agent for sudo authentication</h1>
+    <span class="date">13 March 2011</span>
+    <p><em>pam-ssh-agent-auth</em> is a PAM module which allows you to use your
+SSH keys to authenticate for sudo. If you aren&#8217;t happy using completely
+passwordless sudo but don&#8217;t want to be typing passwords all the time
+this module provides a compromise.</p>
+
+<p>There&#8217;s currently no deb package available (and my debian-fu isn&#8217;t quite up to creating one yet) but it&#8217;s fairly easy to build and configure manually.</p>
+
+<h2>1. Download</h2>
+
+<p>Grab the the source from SourceForge and extract:</p>
+
+<div class="code-highlight"><pre><code><span class="go">wget &quot;http://downloads.sourceforge.net/project/pamsshagentauth/pam_ssh_agent_auth/v0.9.3/pam_ssh_agent_auth-0.9.3.tar.bz2&quot;</span>
+<span class="go">tar -xjvf pam_ssh_agent_auth-0.9.3.tar.bz2</span>
+<span class="go">cd pam_ssh_agent_auth-0.9.3</span>
+</code></pre></div>
+
+<h2>2. Dependencies</h2>
+
+<p>As well as the standard build tools (<em>build-essential</em> and <em>checkinstall</em>) you&#8217;ll need some header files:</p>
+
+<div class="code-highlight"><pre><code><span class="go">sudo aptitude install libssl-dev libpam0g-dev</span>
+</code></pre></div>
+
+<h2>3. Build and install</h2>
+
+<p>Before building, we need to set a couple of configuration options: By default, the module will try to install itself in <code>/usr/local/libexec</code> whereas Ubuntu keeps its PAM modules in <code>/lib/security</code>. We also need to tell it that the man page is in NROFF format, not plain text.</p>
+
+<div class="code-highlight"><pre><code><span class="go">./configure --libexecdir=/lib/security --with-mantype=man</span>
+</code></pre></div>
+
+<p>Now we can build and install:</p>
+
+<div class="code-highlight"><pre><code><span class="go">make</span>
+<span class="go">sudo checkinstall</span>
+</code></pre></div>
+
+<p>As well as installing, <em>checkinstall</em> will spit out a deb package that you can use on other machines as long as they share the same architecture. (The package won&#8217;t include any dependency information but that isn&#8217;t required in this case.) It will also allow you to cleanly uninstall via <code>aptitude remove</code>.</p>
+
+<h2>4. Configure</h2>
+
+<div class="alert alert-error"><strong>Note:</strong> At this point, it
+would be wise to open another terminal and <code>sudo -s</code> to root.
+Otherwise, if you balls up your sudo/PAM config you won't be able to get
+sufficient privileges to fix it, whereupon there will be wailing and
+gnashing of teeth.</div>
+
+<p>We need to make three changes. First, copy your <code>authorized_keys</code> file
+into <code>/etc/ssh/sudo_authorized_keys</code>:</p>
+
+<div class="code-highlight"><pre><code><span class="go">sudo cp ~/.ssh/authorized_keys /etc/ssh/sudo_authorized_keys</span>
+</code></pre></div>
+
+<p>If there are other users who you want to be able to sudo using this
+mechanism you&#8217;ll need to append their authorized_keys to this file as
+well. It&#8217;s important that this file only be writable by root to prevent
+users just writing their own keys into this file and then using those to
+authenticate against.</p>
+
+<p>Secondly, ensure that sudo passes on the SSH_AUTH_SOCK environment variable so PAM knows how to talk to your key agent. Edit your sudoers file (use <code>visudo</code> for this, it will stop you doing anything stupid) and add the following line:</p>
+
+<div class="code-highlight"><pre><code><span class="go">Defaults env_keep += SSH_AUTH_SOCK</span>
+</code></pre></div>
+
+<p>Thirdly, we tell PAM to use this particular module to authenticate for
+sudo. To do this, edit <code>/etc/pam.d/sudo</code> and add the line
+beginning <code>auth</code> (the order of these lines is significant):</p>
+
+<div class="code-highlight"><pre><code><span class="gp">#</span>%PAM-1.0
+
+<span class="go">auth [success=2 default=ignore] pam_ssh_agent_auth.so file=/etc/ssh/sudo_authorized_keys</span>
+<span class="go">@include common-auth</span>
+<span class="go">@include common-account</span>
+
+<span class="go">session required pam_permit.so</span>
+<span class="go">session required pam_limits.so</span>
+</code></pre></div>
+
+<p>We&#8217;re configuring the module as follows:</p>
+
+<p><code>success=2</code><br>
+On a successful authentication, skip the next two config lines i.e., don&#8217;t attempt the normal authentication mechanisms.</p>
+
+<p><code>default=ignore</code><br>
+If anything else happens, carry on as normal so if your key isn&#8217;t available or the module breaks for any reason you can still sudo using your password.</p>
+
+<p><code>file=/etc/ssh/sudo_authorized_keys</code><br>
+The file where the keys which grant sudo rights are stored.</p>
+
+<p>For more details, see the documentation for <a href="http://www.kernel.org/pub/linux/libs/pam/Linux-PAM-html/sag-configuration-file.html">PAM</a> and <a href="http://pamsshagentauth.sourceforge.net/">pam-ssh-agent-auth</a> (also try <code>man pam_ssh_agent_auth</code>).</p>
+
+<h2>5. Test and debug</h2>
+
+<p>Test by using <code>sudo -K</code> to force reauthentication:</p>
+
+<div class="code-highlight"><pre><code><span class="go">sudo -K</span>
+<span class="go">sudo whoami</span>
+</code></pre></div>
+
+<p>You should get the response &#8216;root&#8217; without being prompted for your password. If not, check that your SSH_AUTH_SOCK is set and being correctly passed though by sudo:</p>
+
+<div class="code-highlight"><pre><code><span class="go">printenv | grep SSH</span>
+<span class="go">sudo printenv | grep SSH</span>
+</code></pre></div>
+
+<p>You can also add <code>debug</code> to the end of the <code>auth</code> line in <code>pam.d/sudo</code> and get more detailed information logged to <code>/var/log/auth.log</code></p>
+
+    <div class="links">
+      <a href="/">view other posts &#x2192;</a>
+    </div>
+    <div id="disqus_thread"></div>
+    <script type="text/javascript">
+        var disqus_shortname = 'evansio';
+        var disqus_identifier = 'post_4';
+        var disqus_title = 'Using SSH agent for sudo authentication';
+        
+
+        (function() {
+            var dsq = document.createElement('script'); dsq.type = 'text/javascript'; dsq.async = true;
+            dsq.src = 'http://' + disqus_shortname + '.disqus.com/embed.js';
+            (document.getElementsByTagName('head')[0] || document.getElementsByTagName('body')[0]).appendChild(dsq);
+        })();
+    </script>
+    <noscript>Please enable JavaScript to view the <a href="http://disqus.com/?ref_noscript">comments powered by Disqus.</a></noscript>
+    <a href="http://disqus.com" class="dsq-brlink">comments powered by <span class="logo-disqus">Disqus</span></a>
+  </div>
+
+    </div>
+
+    <div id="footer">
+      <div class="container">
+        <div class="links pull-right">
+          <ul>
+            <li><a href="http://github.com/evansd">github</a>&nbsp;&nbsp;|</li>
+            <li>&nbsp;&nbsp;<a href="http://twitter.com/_EvansD">twitter</a>&nbsp;&nbsp;|</li>
+            <li>&nbsp;&nbsp;<a href="mailto:dave@evansd.net">dave@evansd.net</a></li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </body>
+</html>
