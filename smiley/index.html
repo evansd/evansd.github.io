@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pyodide Smiley Face Animator</title>
+    <script src="https://cdn.jsdelivr.net/pyodide/v0.24.1/full/pyodide.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/codemirror.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/mode/python/python.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/codemirror.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/theme/material-darker.min.css">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            height: 100vh;
+            overflow: hidden;
+        }
+        
+        .container {
+            display: flex;
+            height: 100vh;
+            gap: 20px;
+            padding: 20px;
+        }
+        
+        .left-panel {
+            flex: 1;
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            border-radius: 15px;
+            padding: 20px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .right-panel {
+            flex: 1;
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            border-radius: 15px;
+            padding: 20px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+            position: relative;
+        }
+        
+        h1 {
+            color: #333;
+            margin-bottom: 20px;
+            text-align: center;
+            font-size: 24px;
+            font-weight: 600;
+        }
+        
+        .editor-container {
+            flex: 1;
+            border: 2px solid #e0e0e0;
+            border-radius: 10px;
+            overflow: hidden;
+            margin-bottom: 20px;
+            background: #263238;
+        }
+        
+        .CodeMirror {
+            height: 100%;
+            font-family: 'Fira Code', 'Courier New', monospace;
+            font-size: 14px;
+            line-height: 1.5;
+        }
+        
+        .CodeMirror-gutters {
+            background: #37474f;
+            border-right: 1px solid #555;
+        }
+        
+        .CodeMirror-linenumber {
+            color: #90a4ae;
+        }
+        
+        .controls {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+        
+        .btn {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            flex: 1;
+        }
+        
+        .btn-run {
+            background: linear-gradient(45deg, #4CAF50, #45a049);
+            color: white;
+        }
+        
+        .btn-run:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(76, 175, 80, 0.3);
+        }
+        
+        .btn-stop {
+            background: linear-gradient(45deg, #f44336, #da190b);
+            color: white;
+        }
+        
+        .btn-stop:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(244, 67, 54, 0.3);
+        }
+        
+        .btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+        
+        .status {
+            padding: 10px;
+            border-radius: 8px;
+            margin-bottom: 10px;
+            font-weight: 500;
+        }
+        
+        .status.loading {
+            background: #fff3cd;
+            color: #856404;
+        }
+        
+        .status.ready {
+            background: #d4edda;
+            color: #155724;
+        }
+        
+        .status.error {
+            background: #f8d7da;
+            color: #721c24;
+        }
+        
+        .status.running {
+            background: #cce5ff;
+            color: #004085;
+        }
+        
+        #canvas {
+            border: 2px solid #e0e0e0;
+            border-radius: 10px;
+            background: white;
+            width: 100%;
+            height: calc(100% - 60px);
+        }
+        
+        .canvas-title {
+            color: #333;
+            margin-bottom: 15px;
+            font-size: 18px;
+            font-weight: 600;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="left-panel">
+            <h1>🐍 Python Code Editor</h1>
+            <div class="status" id="status">Loading Pyodide...</div>
+            <div class="editor-container">
+                <textarea id="code-editor">
+x = 200
+y = 200
+
+while True:
+    draw(x, y)
+    await sleep(0.05)
+</textarea>
+            </div>
+            <div class="controls">
+                <button class="btn btn-run" id="run-btn" disabled>▶ Run Code</button>
+                <button class="btn btn-stop" id="stop-btn" disabled>⏹ Stop</button>
+            </div>
+        </div>
+        
+        <div class="right-panel">
+            <div class="canvas-title">🎨 Animation Canvas</div>
+            <canvas id="canvas" width="500" height="400"></canvas>
+        </div>
+    </div>
+
+    <script>
+        let pyodide;
+        let isRunning = false;
+        let stopExecution = false;
+        let editor;
+        
+        const statusEl = document.getElementById('status');
+        const runBtn = document.getElementById('run-btn');
+        const stopBtn = document.getElementById('stop-btn');
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        
+        // Initialize CodeMirror editor
+        function initEditor() {
+            const textarea = document.getElementById('code-editor');
+            editor = CodeMirror.fromTextArea(textarea, {
+                mode: 'python',
+                theme: 'material-darker',
+                lineNumbers: true,
+                indentUnit: 4,
+                indentWithTabs: false,
+                smartIndent: true,
+                autoCloseBrackets: true,
+                matchBrackets: true,
+                lineWrapping: false,
+                foldGutter: true,
+                gutters: ["CodeMirror-linenumbers", "CodeMirror-foldgutter"],
+                extraKeys: {
+                    "Tab": function(cm) {
+                        if (cm.somethingSelected()) {
+                            cm.indentSelection("add");
+                        } else {
+                            cm.replaceSelection("    ", "end");
+                        }
+                    },
+                    "Shift-Tab": function(cm) {
+                        cm.indentSelection("subtract");
+                    },
+                    "Ctrl-/": "toggleComment",
+                    "Cmd-/": "toggleComment",
+                    "Ctrl-Enter": function() {
+                        if (!isRunning) runCode();
+                    },
+                    "Cmd-Enter": function() {
+                        if (!isRunning) runCode();
+                    }
+                }
+            });
+        }
+        
+        // Initialize Pyodide
+        async function initPyodide() {
+            try {
+                statusEl.textContent = 'Loading Pyodide...';
+                statusEl.className = 'status loading';
+                
+                pyodide = await loadPyodide({
+                    indexURL: "https://cdn.jsdelivr.net/pyodide/v0.24.1/full/"
+                });
+                
+                // Set up Python environment
+                pyodide.globals.set('draw', drawSmiley);
+                pyodide.globals.set('sleep', pythonSleep);
+                
+                statusEl.textContent = 'Ready to run Python code!';
+                statusEl.className = 'status ready';
+                runBtn.disabled = false;
+                
+            } catch (error) {
+                statusEl.textContent = 'Error loading Pyodide. Please serve this file from a web server (not file://) or try a different browser.';
+                statusEl.className = 'status error';
+                console.error('Pyodide loading error:', error);
+            }
+        }
+        
+        // Draw smiley face function
+        function drawSmiley(x, y) {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            if (x === -1000 && y === -1000) {
+                return; // Clear canvas
+            }
+            
+            // Face (yellow circle)
+            ctx.beginPath();
+            ctx.arc(x, y, 25, 0, 2 * Math.PI);
+            ctx.fillStyle = '#FFD700';
+            ctx.fill();
+            ctx.strokeStyle = '#FFA500';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+            
+            // Eyes
+            ctx.beginPath();
+            ctx.arc(x - 8, y - 8, 3, 0, 2 * Math.PI);
+            ctx.arc(x + 8, y - 8, 3, 0, 2 * Math.PI);
+            ctx.fillStyle = '#000';
+            ctx.fill();
+            
+            // Mouth (smile)
+            ctx.beginPath();
+            ctx.arc(x, y + 5, 12, 0, Math.PI);
+            ctx.strokeStyle = '#000';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+        }
+        
+        // Python sleep function
+        async function pythonSleep(seconds) {
+            if (stopExecution) {
+                throw new Error('Execution stopped');
+            }
+            await new Promise(resolve => setTimeout(resolve, seconds * 1000));
+        }
+        
+        // Run Python code
+        async function runCode() {
+            if (isRunning) return;
+            
+            isRunning = true;
+            stopExecution = false;
+            runBtn.disabled = true;
+            stopBtn.disabled = false;
+            statusEl.textContent = 'Running Python code...';
+            statusEl.className = 'status running';
+            
+            try {
+                const code = editor.getValue();
+                
+                // Run the Python code
+                await pyodide.runPythonAsync(code);
+                
+                if (!stopExecution) {
+                    statusEl.textContent = 'Code execution completed!';
+                    statusEl.className = 'status ready';
+                }
+                
+            } catch (error) {
+                if (error.message !== 'Execution stopped') {
+                    statusEl.textContent = 'Error: ' + error.message;
+                    statusEl.className = 'status error';
+                }
+            } finally {
+                isRunning = false;
+                runBtn.disabled = false;
+                stopBtn.disabled = true;
+                
+                if (stopExecution) {
+                    statusEl.textContent = 'Execution stopped by user';
+                    statusEl.className = 'status ready';
+                }
+            }
+        }
+        
+        // Stop execution
+        function stopCode() {
+            stopExecution = true;
+            stopBtn.disabled = true;
+        }
+        
+        // Event listeners
+        runBtn.addEventListener('click', runCode);
+        stopBtn.addEventListener('click', stopCode);
+        
+        // Initialize everything
+        initEditor();
+        initPyodide();
+        
+        // Draw initial smiley
+        drawSmiley(250, 200);
+    </script>
+</body>
+</html>
